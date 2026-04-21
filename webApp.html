@@ -1,0 +1,988 @@
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alchemy 101</title>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            color: white;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            height: 100vh;
+            user-select: none;
+            touch-action: none;
+            /* Prevent browser scrolling */
+        }
+
+        #workspace {
+            flex-grow: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #inventory {
+            width: 350px;
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(16px);
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            z-index: 10;
+        }
+
+        .header {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.5em;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            background: -webkit-linear-gradient(#fff, #aaa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header .subtitle {
+            margin-top: 5px;
+            font-size: 0.8em;
+            color: #aaa;
+        }
+
+        #inventory-list {
+            padding: 20px;
+            overflow-y: auto;
+            flex-grow: 1;
+            display: flex;
+            flex-wrap: wrap;
+            align-content: flex-start;
+            gap: 10px;
+        }
+
+        .element {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            padding: 10px 15px;
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), background 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            touch-action: none;
+        }
+
+        .element:hover {
+            background: rgba(255, 255, 255, 0.15);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .element:active {
+            cursor: grabbing;
+        }
+
+        .emoji {
+            font-size: 1.8em;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+        }
+
+        .name {
+            font-weight: 600;
+            font-size: 1em;
+            letter-spacing: 0.5px;
+        }
+
+        .workspace-item {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(8px);
+        }
+
+        .dragging {
+            position: absolute;
+            z-index: 100;
+            pointer-events: none;
+            transform: scale(1.1) !important;
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.5) !important;
+            margin: 0;
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 10;
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            backdrop-filter: blur(5px);
+            transition: background 0.2s;
+            margin-right: 10px;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .particle {
+            position: absolute;
+            pointer-events: none;
+            border-radius: 50%;
+            background: white;
+            opacity: 0;
+            z-index: 1000;
+        }
+
+        .section-header {
+            width: 100%;
+            text-transform: uppercase;
+            font-size: 0.75em;
+            letter-spacing: 1px;
+            color: #888;
+            margin: 10px 0 0px 5px;
+            font-weight: bold;
+        }
+
+        .checkbox-container {
+            padding: 15px 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .check-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .checkbox-container input {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+            accent-color: #ff6b6b;
+        }
+
+        .checkbox-container label {
+            font-size: 0.85em;
+            color: #aaa;
+            cursor: pointer;
+            user-select: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="workspace">
+        <div id="controls">
+            <button id="clear-btn">Clear Workspace</button>
+            <button id="reset-btn" style="border-color: rgba(255, 0, 0, 0.4); color: #ff6b6b;">Reset Progress</button>
+        </div>
+        <button id="recipes-btn" style="position: absolute; bottom: 20px; right: 20px; z-index: 10;">📖 Recipes</button>
+
+        <div id="recipes-modal"
+            style="display: none; position: absolute; inset: 0; background: rgba(0,0,0,0.8); z-index: 200; align-items: center; justify-content: center; backdrop-filter: blur(5px);">
+            <div
+                style="background: rgba(30, 30, 45, 0.9); border: 1px solid rgba(255,255,255,0.2); border-radius: 15px; width: 90vw; height: 90vh; display: flex; flex-direction: column; padding: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 15px;">
+                    <h2 style="margin: 0; font-size: 1.2em;">Visual Recipe Web</h2>
+                    <button id="close-modal-btn" style="margin: 0; padding: 5px 10px;">✕</button>
+                </div>
+                <div id="recipes-network" style="flex-grow: 1; border-radius: 8px; background: rgba(0,0,0,0.2);">
+                    <!-- Vis Network Canvas Here -->
+                </div>
+            </div>
+        </div>
+
+        <div id="victory-modal"
+            style="display: none; position: absolute; inset: 0; background: rgba(0,0,0,0.8); z-index: 300; align-items: center; justify-content: center; backdrop-filter: blur(5px);">
+            <div
+                style="background: rgba(30, 30, 45, 0.95); border: 1px solid rgba(255,215,0,0.5); border-radius: 20px; width: 400px; max-width: 90vw; display: flex; flex-direction: column; padding: 40px; box-shadow: 0 20px 60px rgba(255,215,0,0.15); text-align: center;">
+                <h1 style="margin: 0 0 15px 0; font-size: 3em;">🏆</h1>
+                <h2 style="margin: 0 0 10px 0; font-size: 1.8em; color: #ffd700;">Master Alchemist</h2>
+                <p style="margin: 0 0 25px 0; font-size: 1.1em; color: rgba(255,255,255,0.8); line-height: 1.5;">Congratulations! You have successfully bent the universe to your will and discovered all 101 base elements.</p>
+                <button id="close-victory-btn" style="margin: 0 auto; width: 100%; padding: 12px; font-size: 1.1em; background: linear-gradient(135deg, #ffd700, #ffaa00); color: #000; font-weight: bold; border-radius: 8px; border: none; cursor: pointer;">Continue Exploring</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="inventory">
+        <div class="header">
+            <h1>Alchemy 101</h1>
+            <div class="subtitle" id="counter">4 / ? Elements Discovered</div>
+        </div>
+        <div id="inventory-list">
+        </div>
+        <div class="checkbox-container">
+            <div class="check-row">
+                <input type="checkbox" id="sort-completed">
+                <label for="sort-completed">Separate Completed Elements</label>
+            </div>
+            <div class="check-row">
+                <input type="checkbox" id="sort-alpha">
+                <label for="sort-alpha">Alphabetize Elements</label>
+            </div>
+            <div class="check-row">
+                <input type="checkbox" id="auto-scroll">
+                <label for="auto-scroll">Auto-Scroll to New Elements</label>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ALL_ELEMENTS = {
+            water: { emoji: '💧', name: 'Water' },
+            fire: { emoji: '🔥', name: 'Fire' },
+            earth: { emoji: '🌍', name: 'Earth' },
+            air: { emoji: '💨', name: 'Air' },
+
+            steam: { emoji: '☁️', name: 'Steam' },
+            mud: { emoji: '💩', name: 'Mud' },
+            rain: { emoji: '🌧️', name: 'Rain' },
+            lava: { emoji: '🌋', name: 'Lava' },
+            energy: { emoji: '⚡', name: 'Energy' },
+            dust: { emoji: '🌪️', name: 'Dust' },
+            wind: { emoji: '🌬️', name: 'Wind' },
+            stone: { emoji: '🪨', name: 'Stone' },
+            obsidian: { emoji: '⬛', name: 'Obsidian' },
+            metal: { emoji: '🪙', name: 'Metal' },
+            plant: { emoji: '🌱', name: 'Plant' },
+            glass: { emoji: '🪟', name: 'Glass' },
+            cloud: { emoji: '☁️', name: 'Cloud' },
+            life: { emoji: '🧬', name: 'Life' },
+            golem: { emoji: '🗿', name: 'Golem' },
+            human: { emoji: '👤', name: 'Human' },
+            tools: { emoji: '⚒️', name: 'Tools' },
+            wood: { emoji: '🪵', name: 'Wood' },
+            firewood: { emoji: '🔥🪵', name: 'Firewood' },
+            ash: { emoji: '🌫️', name: 'Ash' },
+            brick: { emoji: '🧱', name: 'Brick' },
+            house: { emoji: '🏠', name: 'House' },
+            village: { emoji: '🏘️', name: 'Village' },
+            electricity: { emoji: '💡', name: 'Electricity' },
+            wave: { emoji: '🌊', name: 'Wave' },
+            sand: { emoji: '🏖️', name: 'Sand' },
+            tree: { emoji: '🌳', name: 'Tree' },
+            forest: { emoji: '🌲', name: 'Forest' },
+            animal: { emoji: '🦌', name: 'Animal' },
+            meat: { emoji: '🥩', name: 'Meat' },
+            camp: { emoji: '🏕️', name: 'Camp' },
+            boat: { emoji: '⛵', name: 'Boat' },
+            ship: { emoji: '🚢', name: 'Ship' },
+            fish: { emoji: '🐟', name: 'Fish' },
+            aquarium: { emoji: '🐡', name: 'Aquarium' },
+            sword: { emoji: '🗡️', name: 'Sword' },
+            warrior: { emoji: '🤺', name: 'Warrior' },
+            bird: { emoji: '🐦', name: 'Bird' },
+            egg: { emoji: '🥚', name: 'Egg' },
+            food: { emoji: '🍳', name: 'Food' },
+            desert: { emoji: '🏜️', name: 'Desert' },
+            cactus: { emoji: '🌵', name: 'Cactus' },
+            oasis: { emoji: '🌴', name: 'Oasis' },
+            island: { emoji: '🏝️', name: 'Island' },
+            sea: { emoji: '🐋', name: 'Sea' },
+            sky: { emoji: '🌤️', name: 'Sky' },
+            sun: { emoji: '☀️', name: 'Sun' },
+            moon: { emoji: '🌕', name: 'Moon' },
+            night: { emoji: '🌃', name: 'Night' },
+            day: { emoji: '🌇', name: 'Day' },
+            time: { emoji: '⏳', name: 'Time' },
+            clock: { emoji: '🕰️', name: 'Clock' },
+            ruins: { emoji: '🏛️', name: 'Ruins' },
+            fossil: { emoji: '🦴', name: 'Fossil' },
+            oil: { emoji: '🛢️', name: 'Oil' },
+            car: { emoji: '🚗', name: 'Car' },
+            swamp: { emoji: '🐊', name: 'Swamp' },
+            clay: { emoji: '🏺', name: 'Clay' },
+            pottery: { emoji: '🥣', name: 'Pottery' },
+            field: { emoji: '🏞️', name: 'Field' },
+            farmer: { emoji: '🧑‍🌾', name: 'Farmer' },
+            grass: { emoji: '🌿', name: 'Grass' },
+            wheat: { emoji: '🌾', name: 'Wheat' },
+            tractor: { emoji: '🚜', name: 'Tractor' },
+            flour: { emoji: '🥡', name: 'Flour' },
+            dough: { emoji: '🥟', name: 'Dough' },
+            bread: { emoji: '🥖', name: 'Bread' },
+            sandwich: { emoji: '🥪', name: 'Sandwich' },
+            toast: { emoji: '🍞', name: 'Toast' },
+            mountain: { emoji: '⛰️', name: 'Mountain' },
+            volcano: { emoji: '🌋', name: 'Volcano' },
+            eruption: { emoji: '🎆', name: 'Eruption' },
+            coal: { emoji: '🌑', name: 'Coal' },
+            diamond: { emoji: '💎', name: 'Diamond' },
+            ring: { emoji: '💍', name: 'Ring' },
+            fireworks: { emoji: '🎇', name: 'Fireworks' },
+            kite: { emoji: '🪁', name: 'Kite' },
+            storm: { emoji: '⛈️', name: 'Storm' },
+            lightning: { emoji: '🌩️', name: 'Lightning' },
+            monster: { emoji: '🧟', name: 'Monster' },
+            ghost: { emoji: '👻', name: 'Ghost' },
+            vampire: { emoji: '🧛', name: 'Vampire' },
+            werewolf: { emoji: '🐺', name: 'Werewolf' },
+            cheese: { emoji: '🧀', name: 'Cheese' },
+            space: { emoji: '🌌', name: 'Space' },
+            star: { emoji: '⭐', name: 'Star' },
+            galaxy: { emoji: '🌀', name: 'Galaxy' },
+            alien: { emoji: '👽', name: 'Alien' },
+            ufo: { emoji: '🛸', name: 'UFO' },
+            astronaut: { emoji: '🧑‍🚀', name: 'Astronaut' },
+            rocket: { emoji: '🚀', name: 'Rocket' },
+            satellite: { emoji: '🛰️', name: 'Satellite' },
+            telescope: { emoji: '🔭', name: 'Telescope' },
+            observatory: { emoji: '🗼', name: 'Observatory' },
+            meteor: { emoji: '☄️', name: 'Meteor' },
+            dinosaur: { emoji: '🦖', name: 'Dinosaur' },
+            zombie: { emoji: '🧟‍♂️', name: 'Zombie' }
+        };
+
+        const RAW_RECIPES = {
+            "fire+water": "steam",
+            "earth+water": "mud",
+            "air+water": "rain",
+            "earth+fire": "lava",
+            "air+fire": "energy",
+            "air+earth": "dust",
+            "air+air": "wind",
+            "air+lava": "stone",
+            "lava+water": "obsidian",
+            "fire+stone": "metal",
+            "earth+rain": "plant",
+            "earth+mud": "plant",
+            "fire+sand": "glass",
+            "air+steam": "cloud",
+            "earth+energy": "life",
+            "life+mud": "golem",
+            "earth+life": "human",
+            "human+stone": "tools",
+            "plant+tools": "wood",
+            "tools+wood": "firewood",
+            "stone+tools": "brick",
+            "fire+wood": "ash",
+            "brick+brick": "house",
+            "house+house": "village",
+            "energy+metal": "electricity",
+            "water+wind": "wave",
+            "air+stone": "sand",
+            "stone+water": "sand",
+            "cloud+water": "rain",
+            "fire+firewood": "ash",
+            "plant+wood": "tree",
+            "tree+tree": "forest",
+            "life+forest": "animal",
+            "animal+tools": "meat",
+            "village+forest": "camp",
+            "wood+water": "boat",
+            "boat+wood": "ship",
+            "animal+water": "fish",
+            "glass+fish": "aquarium",
+            "metal+tools": "sword",
+            "human+sword": "warrior",
+            "animal+air": "bird",
+            "bird+bird": "egg",
+            "egg+fire": "food",
+            "sand+sand": "desert",
+            "desert+plant": "cactus",
+            "desert+water": "oasis",
+            "sea+sand": "island",
+            "water+wave": "sea",
+            "air+cloud": "sky",
+            "sky+fire": "sun",
+            "sky+stone": "moon",
+            "sky+moon": "night",
+            "sky+sun": "day",
+            "day+night": "time",
+            "time+metal": "clock",
+            "time+village": "ruins",
+            "time+animal": "fossil",
+            "earth+fossil": "oil",
+            "oil+metal": "car",
+            "mud+plant": "swamp",
+            "mud+sand": "clay",
+            "clay+fire": "pottery",
+            "earth+tools": "field",
+            "human+field": "farmer",
+            "earth+plant": "grass",
+            "farmer+plant": "wheat",
+            "car+farmer": "tractor",
+            "stone+wheat": "flour",
+            "flour+water": "dough",
+            "dough+fire": "bread",
+            "bread+meat": "sandwich",
+            "bread+fire": "toast",
+            "earth+earth": "mountain",
+            "lava+mountain": "volcano",
+            "energy+volcano": "eruption",
+            "time+wood": "coal",
+            "coal+time": "diamond",
+            "diamond+metal": "ring",
+            "dust+fire": "fireworks",
+            "wind+wood": "kite",
+            "rain+wind": "storm",
+            "energy+storm": "lightning",
+            "human+lightning": "monster",
+            "human+night": "ghost",
+            "night+warrior": "vampire",
+            "human+moon": "werewolf",
+            "moon+time": "cheese",
+            "sky+time": "space",
+            "space+sun": "star",
+            "star+star": "galaxy",
+            "life+space": "alien",
+            "alien+metal": "ufo",
+            "human+space": "astronaut",
+            "astronaut+metal": "rocket",
+            "metal+space": "satellite",
+            "glass+sky": "telescope",
+            "house+telescope": "observatory",
+            "space+stone": "meteor",
+            "fossil+life": "dinosaur",
+            "life+ruins": "zombie"
+        };
+
+        const RECIPES = {};
+        for (const key in RAW_RECIPES) {
+            let sorted = key.split('+').sort().join('+');
+            RECIPES[sorted] = RAW_RECIPES[key];
+        }
+
+        const TOTAL_ELEMENTS = Object.keys(ALL_ELEMENTS).length;
+        let unlocked = JSON.parse(localStorage.getItem('alchemyUnlocked')) || ['water', 'fire', 'earth', 'air'];
+        let discoveredRecipes = JSON.parse(localStorage.getItem('alchemyRecipes')) || [];
+
+        // Validate unlocked array to handle changes to dictionary across updates
+        unlocked = unlocked.filter(id => ALL_ELEMENTS[id]);
+        discoveredRecipes = discoveredRecipes.filter(r => RECIPES[r]);
+
+        let activeDrag = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        function saveProgress() {
+            localStorage.setItem('alchemyUnlocked', JSON.stringify(unlocked));
+            updateCounter();
+        }
+
+        function updateCounter() {
+            document.getElementById('counter').innerText = `${unlocked.length} / ${TOTAL_ELEMENTS} Elements Discovered`;
+        }
+
+        function isElementCompleted(id) {
+            for (let r in RECIPES) {
+                let ingredients = r.split('+');
+                if (ingredients.includes(id)) {
+                    let result = RECIPES[r];
+                    if (!unlocked.includes(result)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        let separateCompleted = localStorage.getItem('alchemySort') === 'true';
+        document.getElementById('sort-completed').checked = separateCompleted;
+        document.getElementById('sort-completed').onchange = (e) => {
+            separateCompleted = e.target.checked;
+            localStorage.setItem('alchemySort', separateCompleted);
+            renderInventory();
+        };
+
+        let autoScroll = localStorage.getItem('alchemyAutoScroll') !== 'false';
+        document.getElementById('auto-scroll').checked = autoScroll;
+        document.getElementById('auto-scroll').onchange = (e) => {
+            autoScroll = e.target.checked;
+            localStorage.setItem('alchemyAutoScroll', autoScroll);
+        };
+
+        let sortAlpha = localStorage.getItem('alchemySortAlpha') === 'true';
+        document.getElementById('sort-alpha').checked = sortAlpha;
+        document.getElementById('sort-alpha').onchange = (e) => {
+            sortAlpha = e.target.checked;
+            localStorage.setItem('alchemySortAlpha', sortAlpha);
+            renderInventory();
+        };
+
+        function renderInventory() {
+            const inv = document.getElementById('inventory-list');
+            inv.innerHTML = '';
+
+            let activeElements = [];
+            let completedElements = [];
+
+            let idsToRender = [...unlocked];
+            if (sortAlpha) {
+                idsToRender.sort((a, b) => ALL_ELEMENTS[a].name.localeCompare(ALL_ELEMENTS[b].name));
+            }
+
+            idsToRender.forEach(id => {
+                if (separateCompleted && isElementCompleted(id)) {
+                    completedElements.push(id);
+                } else {
+                    activeElements.push(id);
+                }
+            });
+
+            const appendItem = (id) => {
+                let el = ALL_ELEMENTS[id];
+                let div = document.createElement('div');
+                div.className = 'element inventory-item';
+                div.dataset.id = id;
+                if (separateCompleted && completedElements.includes(id)) {
+                    div.style.opacity = '0.4';
+                }
+                div.innerHTML = `<span class="emoji">${el.emoji}</span> <span class="name">${el.name}</span>`;
+
+                div.onpointerdown = (e) => startDrag(e, id, true, div);
+                inv.appendChild(div);
+            };
+
+            if (separateCompleted && completedElements.length > 0) {
+                if (activeElements.length > 0) {
+                    let h1 = document.createElement('div');
+                    h1.className = 'section-header';
+                    h1.innerText = 'Active';
+                    inv.appendChild(h1);
+                }
+                activeElements.forEach(appendItem);
+
+                let h2 = document.createElement('div');
+                h2.className = 'section-header';
+                h2.innerText = 'Completed';
+                inv.appendChild(h2);
+                completedElements.forEach(appendItem);
+            } else {
+                idsToRender.forEach(appendItem);
+            }
+
+            updateCounter();
+        }
+
+        function startDrag(e, id, fromInventory, sourceNode) {
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            e.preventDefault();
+
+            let elDOM;
+            if (fromInventory) {
+                elDOM = document.createElement('div');
+                elDOM.className = 'element workspace-item dragging';
+                elDOM.dataset.id = id;
+                elDOM.innerHTML = sourceNode.innerHTML;
+                document.getElementById('workspace').appendChild(elDOM);
+
+                let rect = sourceNode.getBoundingClientRect();
+                dragOffsetX = rect.width / 2;
+                dragOffsetY = rect.height / 2;
+
+                // Note: clientX is robust for pointer events
+                elDOM.style.left = (e.clientX - dragOffsetX) + 'px';
+                elDOM.style.top = (e.clientY - dragOffsetY) + 'px';
+
+                elDOM.onpointerdown = (ev) => startDrag(ev, id, false, elDOM);
+
+            } else {
+                elDOM = sourceNode;
+                elDOM.parentElement.appendChild(elDOM);
+                elDOM.classList.add('dragging');
+                let rect = elDOM.getBoundingClientRect();
+                dragOffsetX = e.clientX - rect.left;
+                dragOffsetY = e.clientY - rect.top;
+
+                // Fix coordinates instantly just in case
+                elDOM.style.left = (e.clientX - dragOffsetX) + 'px';
+                elDOM.style.top = (e.clientY - dragOffsetY) + 'px';
+            }
+
+            activeDrag = elDOM;
+
+            document.addEventListener('pointermove', doDrag);
+            document.addEventListener('pointerup', stopDrag);
+            document.addEventListener('pointercancel', stopDrag);
+        }
+
+        function doDrag(e) {
+            if (!activeDrag) return;
+            activeDrag.style.left = (e.clientX - dragOffsetX) + 'px';
+            activeDrag.style.top = (e.clientY - dragOffsetY) + 'px';
+        }
+
+        function stopDrag(e) {
+            if (!activeDrag) return;
+            document.removeEventListener('pointermove', doDrag);
+            document.removeEventListener('pointerup', stopDrag);
+            document.removeEventListener('pointercancel', stopDrag);
+
+            activeDrag.classList.remove('dragging');
+
+            const invRect = document.getElementById('inventory').getBoundingClientRect();
+            const dragRect = activeDrag.getBoundingClientRect();
+            const centerX = dragRect.left + dragRect.width / 2;
+
+            // If center of dragged item is in the inventory pane, delete it
+            if (centerX > invRect.left) {
+                activeDrag.remove();
+                activeDrag = null;
+                return;
+            }
+
+            checkCombination(activeDrag);
+            activeDrag = null;
+        }
+
+        function checkCombination(element) {
+            const items = document.querySelectorAll('.workspace-item');
+            const rect1 = element.getBoundingClientRect();
+
+            for (let target of items) {
+                if (target === element) continue;
+
+                const rect2 = target.getBoundingClientRect();
+
+                const padding = 20; // Makes combining slightly easier natively
+                if (!(rect1.right - padding < rect2.left + padding ||
+                    rect1.left + padding > rect2.right - padding ||
+                    rect1.bottom - padding < rect2.top + padding ||
+                    rect1.top + padding > rect2.bottom - padding)) {
+
+                    const id1 = element.dataset.id;
+                    const id2 = target.dataset.id;
+
+                    const sortedIds = [id1, id2].sort().join('+');
+                    const resultId = RECIPES[sortedIds];
+
+                    if (resultId) {
+
+                        if (!discoveredRecipes.includes(sortedIds)) {
+                            discoveredRecipes.push(sortedIds);
+                            localStorage.setItem('alchemyRecipes', JSON.stringify(discoveredRecipes));
+                        }
+
+                        const centerX = rect2.left + rect2.width / 2;
+                        const centerY = rect2.top + rect2.height / 2;
+
+                        element.remove();
+                        target.remove();
+
+                        spawnParticles(centerX, centerY);
+
+                        if (!unlocked.includes(resultId)) {
+                            unlocked.push(resultId);
+                            saveProgress();
+                            renderInventory();
+
+                            if (autoScroll) {
+                                setTimeout(() => {
+                                    const newElNode = document.querySelector(`#inventory-list .element[data-id="${resultId}"]`);
+                                    if (newElNode) {
+                                        newElNode.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    }
+                                }, 50);
+                            }
+
+                            if (unlocked.length === TOTAL_ELEMENTS) {
+                                setTimeout(() => {
+                                    document.getElementById('victory-modal').style.display = 'flex';
+                                }, 600);
+                            }
+                        }
+
+                        let newEl = document.createElement('div');
+                        newEl.className = 'element workspace-item';
+                        newEl.dataset.id = resultId;
+                        newEl.innerHTML = `<span class="emoji">${ALL_ELEMENTS[resultId].emoji}</span> <span class="name">${ALL_ELEMENTS[resultId].name}</span>`;
+                        document.getElementById('workspace').appendChild(newEl);
+
+                        const w = newEl.offsetWidth;
+                        const h = newEl.offsetHeight;
+                        newEl.style.left = (centerX - w / 2) + 'px';
+                        newEl.style.top = (centerY - h / 2) + 'px';
+
+                        newEl.onpointerdown = (e) => startDrag(e, resultId, false, newEl);
+
+                        newEl.animate([
+                            { transform: 'scale(0.2) rotate(-15deg)', opacity: 0 },
+                            { transform: 'scale(1.3) rotate(5deg)', opacity: 1 },
+                            { transform: 'scale(1) rotate(0deg)', opacity: 1 }
+                        ], { duration: 400, easing: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)' });
+
+                        return;
+                    }
+                }
+            }
+        }
+
+        function spawnParticles(x, y) {
+            for (let i = 0; i < 15; i++) {
+                let p = document.createElement('div');
+                p.className = 'particle';
+                let size = Math.random() * 8 + 4;
+                p.style.width = size + 'px';
+                p.style.height = size + 'px';
+                p.style.left = (x - size / 2) + 'px';
+                p.style.top = (y - size / 2) + 'px';
+
+                document.body.appendChild(p);
+
+                let angle = Math.random() * Math.PI * 2;
+                let dist = Math.random() * 60 + 30;
+
+                let dx = Math.cos(angle) * dist;
+                let dy = Math.sin(angle) * dist;
+
+                p.animate([
+                    { transform: `translate(0px, 0px) scale(1)`, opacity: 0.8 },
+                    { transform: `translate(${dx}px, ${dy}px) scale(0)`, opacity: 0 }
+                ], { duration: 600, easing: 'ease-out' }).onfinish = () => p.remove();
+            }
+        }
+
+        document.getElementById('clear-btn').onclick = () => {
+            const items = document.querySelectorAll('.workspace-item');
+            items.forEach(el => el.remove());
+        };
+
+        let resetTimeout;
+        document.getElementById('reset-btn').onclick = (e) => {
+            const btn = e.target;
+            if (btn.innerText === "Reset Progress") {
+                btn.innerText = "Click to Confirm";
+                btn.style.backgroundColor = "rgba(255, 0, 0, 0.4)";
+                btn.style.color = "white";
+                clearTimeout(resetTimeout);
+                resetTimeout = setTimeout(() => {
+                    btn.innerText = "Reset Progress";
+                    btn.style.backgroundColor = "";
+                    btn.style.color = "#ff6b6b";
+                }, 3000);
+            } else {
+                clearTimeout(resetTimeout);
+                unlocked = ['water', 'fire', 'earth', 'air'];
+                discoveredRecipes = [];
+                localStorage.setItem('alchemyRecipes', JSON.stringify([]));
+                saveProgress();
+                renderInventory();
+                document.getElementById('clear-btn').click();
+                btn.innerText = "Reset Progress";
+                btn.style.backgroundColor = "";
+                btn.style.color = "#ff6b6b";
+            }
+        };
+
+        let networkInstance = null;
+
+        document.getElementById('recipes-btn').onclick = () => {
+            const container = document.getElementById('recipes-network');
+            document.getElementById('recipes-modal').style.display = 'flex';
+
+            if (discoveredRecipes.length === 0) {
+                container.innerHTML = '<div style="color:#aaa; text-align:center; padding: 40px; font-size: 1.2em;">No recipes discovered yet. Start combining!</div>';
+                return;
+            }
+
+            setTimeout(() => {
+                try {
+                    container.innerHTML = '';
+
+                    let nodesMap = new Map();
+                    let edgesArr = [];
+
+                    // Lock base elements tightly together in the true center, slightly tighter vertically
+                    const basePos = {
+                        'water': { x: -55, y: -40 },
+                        'fire': { x: 55, y: -40 },
+                        'earth': { x: -55, y: 40 },
+                        'air': { x: 55, y: 40 }
+                    };
+
+                    Object.keys(basePos).forEach(id => {
+                        nodesMap.set(id, {
+                            id: id,
+                            label: ALL_ELEMENTS[id].emoji + ' ' + ALL_ELEMENTS[id].name,
+                            shape: 'box',
+                            x: basePos[id].x,
+                            y: basePos[id].y,
+                            fixed: true,
+                            color: {
+                                background: 'rgba(25, 25, 40, 1)',
+                                border: 'rgba(255,255,255,0.4)',
+                                highlight: { background: 'rgba(60, 60, 80, 1)', border: '#ff6b6b' },
+                                hover: { background: 'rgba(60, 60, 80, 1)', border: '#ff6b6b' }
+                            },
+                            font: { color: 'white', face: 'Inter', align: 'center', size: 18 },
+                            borderWidth: 2,
+                            margin: 15
+                        });
+                    });
+
+                    discoveredRecipes.forEach(recipeKey => {
+                        let parts = recipeKey.split('+');
+                        let resultId = RECIPES[recipeKey];
+
+                        [parts[0], parts[1], resultId].forEach(id => {
+                            if (!nodesMap.has(id)) {
+                                nodesMap.set(id, {
+                                    id: id,
+                                    label: ALL_ELEMENTS[id].emoji + ' ' + ALL_ELEMENTS[id].name,
+                                    shape: 'box',
+                                    color: {
+                                        background: 'rgba(40, 40, 60, 1)',
+                                        border: 'rgba(255,255,255,0.2)',
+                                        highlight: { background: 'rgba(60, 60, 80, 1)', border: '#ff6b6b' },
+                                        hover: { background: 'rgba(60, 60, 80, 1)', border: '#ff6b6b' }
+                                    },
+                                    font: { color: 'white', face: 'Inter', align: 'center', size: 16 },
+                                    borderWidth: 1,
+                                    margin: 12
+                                });
+                            }
+                        });
+
+                        // tightly unique edge ids to prevent collision on duplicate ingredients (e.g. air+air)
+                        let e1 = `e_${parts[0]}_${resultId}_${recipeKey}_0`;
+                        let e2 = `e_${parts[1]}_${resultId}_${recipeKey}_1`;
+                        edgesArr.push({ id: e1, from: parts[0], to: resultId, arrows: 'to' });
+                        edgesArr.push({ id: e2, from: parts[1], to: resultId, arrows: 'to' });
+                    });
+
+                    let nodesDataSet = new vis.DataSet(Array.from(nodesMap.values()));
+                    let edgesDataSet = new vis.DataSet(edgesArr);
+
+                    let data = {
+                        nodes: nodesDataSet,
+                        edges: edgesDataSet
+                    };
+
+                    let options = {
+                        physics: {
+                            solver: 'barnesHut',
+                            barnesHut: {
+                                gravitationalConstant: -3000,
+                                centralGravity: 0.05,
+                                springLength: 200,
+                                springConstant: 0.01,
+                                damping: 0.1
+                            }
+                        },
+                        edges: {
+                            color: { color: 'rgba(255,255,255,0.3)', highlight: '#ff6b6b' },
+                            smooth: { type: 'continuous' }
+                        },
+                        interaction: {
+                            hover: true,
+                            tooltipDelay: 200,
+                            hoverConnectedEdges: false,
+                            selectConnectedEdges: false
+                        }
+                    };
+
+                    networkInstance = new vis.Network(container, data, options);
+
+                    // Custom targeted highlight engine
+                    let customHighlightedEdges = [];
+                    let customHighlightedNodes = [];
+
+                    networkInstance.on("hoverNode", function (params) {
+                        const hoveredId = params.node;
+                        const eUpdate = [];
+                        const nUpdate = [];
+
+                        // Discover incoming edges
+                        const allEdges = edgesDataSet.get();
+                        allEdges.forEach(e => {
+                            if (e.to === hoveredId) {
+                                eUpdate.push({ id: e.id, color: { color: '#ff6b6b', opacity: 1 } });
+                                nUpdate.push({ id: e.from, color: { border: '#ff6b6b' }, borderWidth: 2 });
+
+                                customHighlightedEdges.push(e.id);
+                                customHighlightedNodes.push(e.from);
+                            }
+                        });
+
+                        if (eUpdate.length) edgesDataSet.update(eUpdate);
+                        if (nUpdate.length) nodesDataSet.update(nUpdate);
+                    });
+
+                    networkInstance.on("blurNode", function (params) {
+                        // Revert tracked custom highlights
+                        const eRevert = [];
+                        const nRevert = [];
+
+                        customHighlightedEdges.forEach(eId => {
+                            eRevert.push({ id: eId, color: { color: 'rgba(255,255,255,0.3)' } });
+                        });
+
+                        customHighlightedNodes.forEach(nId => {
+                            let defaultColor = basePos[nId] ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.2)';
+                            let defaultWidth = basePos[nId] ? 2 : 1;
+                            nRevert.push({ id: nId, color: { border: defaultColor }, borderWidth: defaultWidth });
+                        });
+
+                        if (eRevert.length) edgesDataSet.update(eRevert);
+                        if (nRevert.length) nodesDataSet.update(nRevert);
+
+                        customHighlightedEdges = [];
+                        customHighlightedNodes = [];
+                    });
+
+                } catch (err) {
+                    container.innerHTML = `<div style="color:#ff6b6b; padding:20px; font-weight:bold; font-size: 1.2em;">An underlying Physics Error Occurred:<br>${err.message}<br><br><span style="font-size:0.8em;opacity:0.8;white-space:pre-wrap">${err.stack}</span></div>`;
+                }
+            }, 10);
+        };
+
+        document.getElementById('close-modal-btn').onclick = () => {
+            document.getElementById('recipes-modal').style.display = 'none';
+            if (networkInstance) {
+                networkInstance.destroy();
+                networkInstance = null;
+            }
+        };
+
+        document.getElementById('close-victory-btn').onclick = () => {
+            document.getElementById('victory-modal').style.display = 'none';
+        };
+
+        renderInventory();
+    </script>
+</body>
+
+</html>
